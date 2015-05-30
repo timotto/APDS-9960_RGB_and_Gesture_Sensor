@@ -57,7 +57,7 @@ bool SparkFun_APDS9960::init()
     uint8_t id;
 
     /* Initialize I2C */
-    Wire.begin();
+    // Wire.begin();
      
     /* Read ID register and check against known values for APDS-9960 */
     if( !wireReadDataByte(APDS9960_ID, id) ) {
@@ -465,6 +465,7 @@ static uint8_t fifo_level = 0;
 static uint8_t bytes_read = 0;
 static uint8_t fifo_data[128];
 static uint32_t fifo_read_time = 0;
+static uint32_t gesture_start_time = 0;
 
 /**
  * @brief Processes a gesture event and returns best guessed gesture
@@ -476,6 +477,7 @@ int SparkFun_APDS9960::readGesture()
     uint8_t gstatus;
     int motion;
     int i;
+    gesture_data_.proximity=255;
 
     switch(gesture_state) {
         case 0:
@@ -486,7 +488,8 @@ int SparkFun_APDS9960::readGesture()
             }
             fifo_level = 0;
             bytes_read = 0;
-            fifo_read_time = millis() + FIFO_PAUSE_TIME;
+            gesture_start_time = millis();
+            fifo_read_time = gesture_start_time + FIFO_PAUSE_TIME;
             gesture_state = 1;
             break;
 
@@ -532,6 +535,10 @@ int SparkFun_APDS9960::readGesture()
 
                     /* If at least 1 set of data, sort the data into U/D/L/R */
                     if( bytes_read >= 4 ) {
+                        gesture_data_.proximity = 255 - fifo_data[0];
+                        // gesture_data_.proximity = 1023 - ( fifo_data[0] + 
+                        //     fifo_data[1] + fifo_data[2] + fifo_data[3]);
+
                         for( i = 0; i < bytes_read; i += 4 ) {
                             gesture_data_.u_data[gesture_data_.index] = \
                                                                 fifo_data[i + 0];
@@ -559,7 +566,7 @@ int SparkFun_APDS9960::readGesture()
                             if( decodeGesture() ) {
                                 //***TODO: U-Turn Gestures
 #if DEBUG
-                                //Serial.println(gesture_motion_);
+                                Serial.println(gesture_motion_);
 #endif
                             }
                         }
@@ -585,7 +592,7 @@ int SparkFun_APDS9960::readGesture()
             /* Determine best guessed gesture and clean up */
             decodeGesture();
             motion = gesture_motion_;
-#if DEBUG
+#if DEBUG1
             Serial.print("END: ");
             Serial.println(gesture_motion_);
 #endif
@@ -779,6 +786,11 @@ void SparkFun_APDS9960::resetGestureParameters()
     gesture_motion_ = DIR_NONE;
 }
 
+uint16_t SparkFun_APDS9960::readProximity2()
+{
+    return gesture_data_.proximity;
+}
+
 /**
  * @brief Processes the raw gesture data to determine swipe direction
  *
@@ -810,7 +822,6 @@ bool SparkFun_APDS9960::processGestureData()
     /* Check to make sure our data isn't out of bounds */
     if( (gesture_data_.total_gestures <= 32) && \
         (gesture_data_.total_gestures > 0) ) {
-        
         /* Find the first value in U/D/L/R above the threshold */
         for( i = 0; i < gesture_data_.total_gestures; i++ ) {
             if( (gesture_data_.u_data[i] > GESTURE_THRESHOLD_OUT) &&
@@ -946,6 +957,9 @@ bool SparkFun_APDS9960::processGestureData()
                 } else if( (ud_delta != 0) && (lr_delta != 0) ) {
                     gesture_state_ = FAR_STATE;
                 }
+#if DEBUG1
+                Serial.println("NEAR/FAR");
+#endif
                 return true;
             }
         }
@@ -988,14 +1002,35 @@ bool SparkFun_APDS9960::processGestureData()
  */
 bool SparkFun_APDS9960::decodeGesture()
 {
+
     /* Return if near or far event is detected */
-    if( gesture_state_ == NEAR_STATE ) {
-        gesture_motion_ = DIR_NEAR;
-        return true;
-    } else if ( gesture_state_ == FAR_STATE ) {
-        gesture_motion_ = DIR_FAR;
+    if (gesture_state == NEAR_STATE || gesture_state == FAR_STATE) {
+    #if DEBUG1
+        Serial.print("DEC_GEST: ");
+        Serial.print("UD_CT: ");
+        Serial.print(gesture_ud_count_);
+        Serial.print(" LR_CT: ");
+        Serial.print(gesture_lr_count_);
+        Serial.print(" NEAR_CT: ");
+        Serial.print(gesture_near_count_);
+        Serial.print(" FAR_CT: ");
+        Serial.println(gesture_far_count_);
+        Serial.println("----------");
+    #endif
+        if (gesture_near_count_ > gesture_far_count_)
+            gesture_motion_ = DIR_NEAR;
+        else if (gesture_near_count_ < gesture_far_count_) gesture_motion_ = DIR_FAR;
+        else return false;
+
         return true;
     }
+    // if( gesture_state_ == NEAR_STATE ) {
+    //     gesture_motion_ = DIR_NEAR;
+    //     return true;
+    // } else if ( gesture_state_ == FAR_STATE ) {
+    //     gesture_motion_ = DIR_FAR;
+    //     return true;
+    // }
     
     /* Determine swipe direction */
     if( (gesture_ud_count_ == -1) && (gesture_lr_count_ == 0) ) {
@@ -2130,9 +2165,10 @@ bool SparkFun_APDS9960::wireWriteByte(uint8_t val)
 {
     Wire.beginTransmission(APDS9960_I2C_ADDR);
     Wire.write(val);
-    if( Wire.endTransmission() != 0 ) {
-        return false;
-    }
+    Wire.endTransmission();
+    // if( Wire.endTransmission() != 0 ) {
+    //     return false;
+    // }
     
     return true;
 }
@@ -2149,9 +2185,10 @@ bool SparkFun_APDS9960::wireWriteDataByte(uint8_t reg, uint8_t val)
     Wire.beginTransmission(APDS9960_I2C_ADDR);
     Wire.write(reg);
     Wire.write(val);
-    if( Wire.endTransmission() != 0 ) {
-        return false;
-    }
+    Wire.endTransmission();
+    // if( Wire.endTransmission() != 0 ) {
+    //     return false;
+    // }
 
     return true;
 }
@@ -2175,9 +2212,10 @@ bool SparkFun_APDS9960::wireWriteDataBlock(  uint8_t reg,
     for(i = 0; i < len; i++) {
         Wire.beginTransmission(val[i]);
     }
-    if( Wire.endTransmission() != 0 ) {
-        return false;
-    }
+    Wire.endTransmission();
+    // if( Wire.endTransmission() != 0 ) {
+    //     return false;
+    // }
 
     return true;
 }
@@ -2196,9 +2234,9 @@ bool SparkFun_APDS9960::wireReadDataByte(uint8_t reg, uint8_t &val)
     if (!wireWriteByte(reg)) {
         return false;
     }
-    
+
     /* Read from register */
-    Wire.requestFrom(APDS9960_I2C_ADDR, 1);
+    Wire.requestFrom(APDS9960_I2C_ADDRR, 1);
     while (Wire.available()) {
         val = Wire.read();
     }
@@ -2214,19 +2252,18 @@ bool SparkFun_APDS9960::wireReadDataByte(uint8_t reg, uint8_t &val)
  * @param[in] len number of bytes to read
  * @return Number of bytes read. -1 on read error.
  */
-int SparkFun_APDS9960::wireReadDataBlock(   uint8_t reg, 
+int SparkFun_APDS9960::wireReadDataBlock(uint8_t reg, 
                                         uint8_t *val, 
                                         unsigned int len)
 {
     unsigned char i = 0;
-    
     /* Indicate which register we want to read from */
     if (!wireWriteByte(reg)) {
         return -1;
     }
-    
+
     /* Read block data */
-    Wire.requestFrom(APDS9960_I2C_ADDR, len);
+    Wire.requestFrom(APDS9960_I2C_ADDRR, len);
     while (Wire.available()) {
         if (i >= len) {
             return -1;

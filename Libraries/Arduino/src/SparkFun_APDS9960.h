@@ -18,9 +18,12 @@
 
 /* Debug */
 #define DEBUG                   0
+#define DEBUG1                  0
+#define DEBUG2                  1
 
 /* APDS-9960 I2C address */
 #define APDS9960_I2C_ADDR       0x39
+#define APDS9960_I2C_ADDRR      0x39
 
 /* Gesture parameters */
 #define GESTURE_THRESHOLD_OUT   10
@@ -211,6 +214,7 @@ typedef struct gesture_data_type {
     uint8_t total_gestures;
     uint8_t in_threshold;
     uint8_t out_threshold;
+    uint16_t proximity;
 } gesture_data_type;
 
 /* APDS9960 Class */
@@ -282,6 +286,7 @@ public:
     
     /* Proximity methods */
     bool readProximity(uint8_t &val);
+    uint16_t readProximity2();
     
     /* Gesture methods */
     bool isGestureAvailable();
